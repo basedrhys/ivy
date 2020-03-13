@@ -8,7 +8,8 @@ from util.bounding_box import get_centroid, get_overlap, get_box_image
 from util.image import get_base64_image
 from util.vehicle_info import generate_vehicle_id
 from util.logger import get_logger
-
+from trackerKCF import KCFTracker as MyKCFTracker
+from os import getenv
 
 logger = get_logger()
 
@@ -28,6 +29,22 @@ def _kcf_create(bounding_box, frame):
     tracker.init(frame, tuple(bounding_box))
     return tracker
 
+def _mosse_create(bounding_box, frame):
+    '''
+    Create an OpenCV KCF Tracker object.
+    '''
+    tracker = cv2.TrackerMOSSE_create()
+    tracker.init(frame, tuple(bounding_box))
+    return tracker
+
+def _my_kcf_create(bounding_box, frame):
+    '''
+    Create an OpenCV KCF Tracker object.
+    '''
+    tracker = MyKCFTracker(False, True, True)
+    tracker.init(bounding_box, frame)
+    return tracker
+
 def get_tracker(algorithm, bounding_box, frame):
     '''
     Fetch a tracker object based on the algorithm specified.
@@ -36,8 +53,12 @@ def get_tracker(algorithm, bounding_box, frame):
         return _csrt_create(bounding_box, frame)
     if algorithm == 'kcf':
         return _kcf_create(bounding_box, frame)
+    if algorithm == 'mosse':
+        return _mosse_create(bounding_box, frame)
+    if algorithm == 'my_kcf':
+        return _my_kcf_create(bounding_box, frame)
 
-    raise Exception('Invalid tracking algorithm specified (options: csrt, kcf)')
+    raise Exception('Invalid tracking algorithm specified (options: csrt, kcf, my_kcf)')
 
 def _remove_stray_blobs(blobs, matched_blob_ids, mcdf):
     '''
@@ -112,24 +133,64 @@ def remove_duplicates(blobs):
             if get_overlap(blob_a.bounding_box, blob_b.bounding_box) >= 0.6 and blob_id in blobs:
                 del blobs[blob_id]
     return blobs
+import time
 
 def update_blob_tracker(blob, blob_id, frame):
     '''
     Update a blob's tracker object.
     '''
-    success, box = blob.tracker.update(frame)
-    if success:
-        blob.num_consecutive_tracking_failures = 0
+    # start = time.perf_counter()
+    if getenv("TRACKER") == "my_kcf":
+        box = blob.tracker.update(frame)
         blob.update(box)
-        logger.debug('Vehicle tracker updated.', extra={
-            'meta': {
-                'label': 'TRACKER_UPDATE',
-                'vehicle_id': blob_id,
-                'bounding_box': blob.bounding_box,
-                'centroid': blob.centroid,
-            },
-        })
+    # if success:
+    #     blob.num_consecutive_tracking_failures = 0
+    #     logger.debug('Vehicle tracker updated.', extra={
+    #         'meta': {
+    #             'label': 'TRACKER_UPDATE',
+    #             'vehicle_id': blob_id,
+    #             'bounding_box': blob.bounding_box,
+    #             'centroid': blob.centroid,
+    #         },
+    #     })
+    # else:
+    #     blob.num_consecutive_tracking_failures += 1
     else:
-        blob.num_consecutive_tracking_failures += 1
+            # start = time.perf_counter()
+        success, box = blob.tracker.update(frame)
+        # inference_time = time.perf_counter() - start
+        # print("%.3f ms" % (inference_time * 1000))
+        if success:
+            blob.num_consecutive_tracking_failures = 0
+            blob.update(box)
+        else:
+            blob.num_consecutive_tracking_failures += 1
+
+    # inference_time = time.perf_counter() - start
+    # print("%.3f ms" % (inference_time * 1000))
 
     return (blob_id, blob)
+
+def update_blob_tracker_queue(in_queue, out_queue):
+    '''
+    Update a blob's tracker object.
+    '''
+    while True:
+        blob, blob_id, frame = in_queue.get(True)
+        success, box = blob.tracker.update(frame)
+        if success:
+            blob.num_consecutive_tracking_failures = 0
+            blob.update(box)
+            logger.debug('Vehicle tracker updated.', extra={
+                'meta': {
+                    'label': 'TRACKER_UPDATE',
+                    'vehicle_id': blob_id,
+                    'bounding_box': blob.bounding_box,
+                    'centroid': blob.centroid,
+                },
+            })
+        else:
+            blob.num_consecutive_tracking_failures += 1
+
+        out_queue.put((blob_id, blob))
+        return 

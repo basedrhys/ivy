@@ -25,6 +25,9 @@ def run():
     is_cam = ast.literal_eval(os.getenv('IS_CAM'))
     video = int(os.getenv('VIDEO')) if is_cam else os.getenv('VIDEO')
     cap = cv2.VideoCapture(video)
+    # cap = cv2.VideoCapture(video + cv2.CAP_DSHOW)
+    # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     if not cap.isOpened():
         raise Exception('Invalid video source {0}'.format(video))
     ret, frame = cap.read()
@@ -45,7 +48,7 @@ def run():
     draw_counts = ast.literal_eval(os.getenv('DRAW_COUNTS'))
 
     vehicle_counter = VehicleCounter(frame, detector, tracker, droi, show_droi, mcdf,
-                                     mctf, detection_interval, counting_lines, draw_counts)
+                                     mctf, detection_interval, counting_lines, draw_counts, use_droi)
 
     record = ast.literal_eval(os.getenv('RECORD'))
     headless = ast.literal_eval(os.getenv('HEADLESS'))
@@ -82,8 +85,12 @@ def run():
     is_paused = False
     output_frame = None
 
+    time_begin = time.perf_counter()
+    frame_counter = 0
+
     # main loop
-    while is_cam or cap.get(cv2.CAP_PROP_POS_FRAMES) + 1 < cap.get(cv2.CAP_PROP_FRAME_COUNT):
+    # while is_cam or cap.get(cv2.CAP_PROP_POS_FRAMES) + 1 < cap.get(cv2.CAP_PROP_FRAME_COUNT):
+    while frame_counter < 1000:
         k = cv2.waitKey(1) & 0xFF
         if k == ord('p'): # pause/play loop if 'p' key is pressed
             is_paused = False if is_paused else True
@@ -112,20 +119,29 @@ def run():
                 resized_frame = cv2.resize(output_frame, debug_window_size)
                 cv2.imshow('Debug', resized_frame)
 
-        processing_frame_rate = round(cv2.getTickFrequency() / (cv2.getTickCount() - _timer), 2)
-        frames_processed = round(cap.get(cv2.CAP_PROP_POS_FRAMES))
-        frames_count = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        logger.debug('Frame processed.', extra={
-            'meta': {
-                'label': 'FRAME_PROCESS',
-                'frames_processed': frames_processed,
-                'frame_rate': processing_frame_rate,
-                'frames_left': frames_count - frames_processed,
-                'percentage_processed': round((frames_processed / frames_count) * 100, 2),
-            },
-        })
+        # processing_frame_rate = round(cv2.getTickFrequency() / (cv2.getTickCount() - _timer), 2)
+        # frames_processed = round(cap.get(cv2.CAP_PROP_POS_FRAMES))
+        # frames_count = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        # logger.debug('Frame processed.', extra={
+        #     'meta': {
+        #         'label': 'FRAME_PROCESS',
+        #         'frames_processed': frames_processed,
+        #         'frame_rate': processing_frame_rate,
+        #         'frames_left': frames_count - frames_processed,
+        #         'percentage_processed': round((frames_processed / frames_count) * 100, 2),
+        #     },
+        # })
 
         ret, frame = cap.read()
+
+        frame_counter += 1
+
+        # # Skip every n frames
+        # if frame_counter % 3 == 0:
+        #     ret, frame = cap.read()
+
+    total_time = time.time() - time_begin
+    print("%.4f" % (total_time))
 
     # end capture, close window, close log file and video object if any
     cap.release()
@@ -133,6 +149,11 @@ def run():
         cv2.destroyAllWindows()
     if record:
         output_video.release()
+
+    # print("Median detection time", np.median(vehicle_counter.detection_times))
+    print("Median detection time", vehicle_counter.detection_average)
+    print("Median tracking time", vehicle_counter.tracking_average)
+
     logger.info('Processing ended.', extra={'meta': {'label': 'END_PROCESS'}})
 
 

@@ -21,8 +21,6 @@ setup_logger()
 
 with open(os.getenv('DETECTRON2_CLASSES_PATH'), 'r') as classes_file:
     CLASSES = dict(enumerate([line.strip() for line in classes_file.readlines()]))
-with open(os.getenv('DETECTRON2_CLASSES_OF_INTEREST_PATH'), 'r') as coi_file:
-    CLASSES_OF_INTEREST = tuple([line.strip() for line in coi_file.readlines()])
 
 # initialize model with weights and config
 cfg = get_cfg()

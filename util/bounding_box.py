@@ -65,3 +65,9 @@ def get_box_image(frame, bbox):
     '''
     x, y, w, h = list(map(int, bbox))
     return frame[y - 10:y + h + 10, x - 10:x + w + 10] # allowance of 10 pixels on every side
+
+
+bbox1 = [488, 384, 682 - 488, 482 - 384]
+bbox2 = [550, 374, 722 - 550, 459 - 374]
+
+print(get_overlap(bbox1, bbox2))

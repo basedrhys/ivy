@@ -44,6 +44,7 @@ def get_bounding_boxes(image):
     
     # Run inference
     output_dict = model(input_tensor)
+
     # All outputs are batches tensors.
     # Convert to numpy arrays, and take index [0] to remove the batch dimension.
     # We're only interested in the first num_detections.
